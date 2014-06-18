@@ -1,46 +1,113 @@
+require 'delegate'
+
 def update_quality(items)
   items.each do |item|
-    if item.name != 'Aged Brie' && item.name != 'Backstage passes to a TAFKAL80ETC concert'
-      if item.quality > 0
-        if item.name != 'Sulfuras, Hand of Ragnaros'
-          item.quality -= 1
-        end
-      end
-    else
-      if item.quality < 50
-        item.quality += 1
-        if item.name == 'Backstage passes to a TAFKAL80ETC concert'
-          if item.sell_in < 11
-            if item.quality < 50
-              item.quality += 1
-            end
-          end
-          if item.sell_in < 6
-            if item.quality < 50
-              item.quality += 1
-            end
-          end
-        end
-      end
+    item_class = Items.class_mapping[item.name]
+    item_class.new(item).update!
+  end
+end
+
+module Items
+  def self.class_mapping
+    {
+      "NORMAL ITEM"                               => NormalItem,
+      "Aged Brie"                                 => AgedBrieItem,
+      "Sulfuras, Hand of Ragnaros"                => SulfurasItem,
+      "Backstage passes to a TAFKAL80ETC concert" => BackstageItem,
+      "Conjured Mana Cake"                        => ConjuredItem
+    }
+  end
+
+  class ItemDecorator < SimpleDelegator
+    MAX_QUALITY = 50
+
+    def age!
+      self.sell_in -= 1
     end
-    if item.name != 'Sulfuras, Hand of Ragnaros'
-      item.sell_in -= 1
+
+    def increase_quality!(amount)
+      self.quality += amount
+      constrain_quality
     end
-    if item.sell_in < 0
-      if item.name != "Aged Brie"
-        if item.name != 'Backstage passes to a TAFKAL80ETC concert'
-          if item.quality > 0
-            if item.name != 'Sulfuras, Hand of Ragnaros'
-              item.quality -= 1
-            end
-          end
-        else
-          item.quality = item.quality - item.quality
-        end
+
+    def decrease_quality!(amount)
+      self.quality -= amount
+      constrain_quality
+    end
+
+    def before_sell_date?
+      self.sell_in >= 0
+    end
+
+    def long_before_sell_date?
+      self.sell_in >= 10
+    end
+
+    def medium_close_to_sell_date?
+      self.sell_in >= 5
+    end
+
+    private
+
+    def constrain_quality
+      self.quality = 0 if self.quality < 0
+      self.quality = MAX_QUALITY if self.quality > MAX_QUALITY
+    end
+  end
+
+  class NormalItem < ItemDecorator
+    def update!
+      age!
+
+      if before_sell_date?
+        decrease_quality! 1
       else
-        if item.quality < 50
-          item.quality += 1
-        end
+        decrease_quality! 2
+      end
+    end
+  end
+
+  class AgedBrieItem < ItemDecorator
+    def update!
+      age!
+
+      if before_sell_date?
+        increase_quality! 1
+      else
+        increase_quality! 2
+      end
+    end
+  end
+
+  class SulfurasItem < ItemDecorator
+    def update!
+    end
+  end
+
+  class BackstageItem < ItemDecorator
+    def update!
+      age!
+
+      if long_before_sell_date?
+        increase_quality! 1
+      elsif medium_close_to_sell_date?
+        increase_quality! 2
+      elsif before_sell_date?
+        increase_quality! 3
+      else
+        self.quality = 0
+      end
+    end
+  end
+
+  class ConjuredItem < ItemDecorator
+    def update!
+      age!
+
+      if before_sell_date?
+        decrease_quality! 2
+      else
+        decrease_quality! 4
       end
     end
   end
@@ -60,4 +127,3 @@ Item = Struct.new(:name, :sell_in, :quality)
 #   Item.new("Backstage passes to a TAFKAL80ETC concert", 15, 20),
 #   Item.new("Conjured Mana Cake", 3, 6),
 # ]
-
